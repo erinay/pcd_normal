@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>pcd_write</name>
+  <version>0.0.1</version>
+  <description>The pcd_write package</description>
+
+  <maintainer email="your_email@example.com">Your Name</maintainer>
+
+  <license>TODO</license>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>pcl_ros</depend>
+  <depend>PCL</depend>
+</package>
