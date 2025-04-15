@@ -1,21 +1,38 @@
 #include <rclcpp/qos.hpp>
 #include <rclcpp/rclcpp.hpp>
 
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/conversions.h>
+
 #include <geometry_msgs/msg/point.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 
 // TODO: Subscribe to lidar data (pointCloud2 topic)
-class PointCloudProcesser : public rclpp::Node
+class PointCloudProcesser : public rclcpp::Node
 {
-public:
-    PointCloudProcesser()
-        :Node('point_cloud_processor', rclcpp::NodeOptions())
-        .allow_undeclared_parameters(true)
-        .automatically_declare_parameters_from_overrides(true))
-        {
-            // Settin up Publishers
-            // RCLCPP_INFO(this->get_logger(), "Setting up publishers");
-            voxel_grid_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("voxel_cluster", 1);
-            crop_pub_       = this->create_publisher<sensor_msgs::msg::PointCloud2>("crop_cluster", 1);
+    public:
+        PointCloudProcesser()
+        : Node("point_cloud_processor"){
+            // Set up pointcloud subscriber
+            pc_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
+                "/livox/lidar", 10, std::bind(&PointCloudProcesser::cloud_callback, this, std::placeholders::_1));
         }
+    
+    private:
+        void cloud_callback(const sensor_msgs::msg::PointCloud2::SharedPtr msg){
+            // Create PCL Point CLoud object
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
+            pcl::fromROSMsg(*msg, *cloud);
+        }
+        rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pc_sub_;
+
+};
+
+int main(int argc, char *argv[])
+{
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<PointCloudProcesser>());
+    rclcpp::shutdown();
+    return 0;
 }

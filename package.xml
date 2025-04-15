@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>pcd_write</name>
+  <name>pcd</name>
   <version>0.0.1</version>
-  <description>The pcd_write package</description>
+  <description>The pcd package</description>
 
   <maintainer email="your_email@example.com">Your Name</maintainer>
 
