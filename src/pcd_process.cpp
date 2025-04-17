@@ -93,10 +93,12 @@ class PointCloudProcesser : public rclcpp::Node
                 normal_vec.normalize();
                 
 
-                if(normal_vec.getZ()>0.6 || normal_vec.getZ()<-0.6){
+                if(normal_vec.getZ()>0.5 || normal_vec.getZ()<-0.5){
                     marker.color.r=1.0;
                     marker.color.g=0.0;
                     RCLCPP_INFO(this->get_logger(), "p_start: z=%.3f", normal_vec.getZ());
+                    continue;
+
                 }
 
                 // Compute rotation from X-axis to normal direction
