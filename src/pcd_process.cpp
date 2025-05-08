@@ -1,11 +1,11 @@
 #include <rclcpp/qos.hpp>
 #include <rclcpp/rclcpp.hpp>
 
-#include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/conversions.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/features/normal_3d.h>
+#include <pcl/filters/voxel_grid.h>
 
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
@@ -14,6 +14,13 @@
 
 //Debug Tools
 // #include <sensor_msgs/point_cloud2_iterator.hpp>
+
+inline bool isFinite(const tf2::Quaternion& q) {
+    return std::isfinite(q.x()) &&
+           std::isfinite(q.y()) &&
+           std::isfinite(q.z()) &&
+           std::isfinite(q.w());
+}
 
 // TODO: Subscribe to lidar data (pointCloud2 topic)
 class PointCloudProcesser : public rclcpp::Node
@@ -25,7 +32,8 @@ class PointCloudProcesser : public rclcpp::Node
             pc_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
                 "livox/lidar", 10, std::bind(&PointCloudProcesser::cloud_callback, this, std::placeholders::_1));
             // Set up normal publisher      
-            ne_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("cloud_normals", 10);
+            voxel_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("voxel_grid",10);
+            filtered_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("filtered_cloud", 10);
             // pc_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_repub",10);
         }
     
@@ -53,10 +61,10 @@ class PointCloudProcesser : public rclcpp::Node
             // Compute the features
             ne.compute(*cloud_normals);
 
-            // // Create a Marker message to visualize normals as arrows
-            visualization_msgs::msg::MarkerArray marker_array;
-            
-            // Loop through each point and normal to create an arrow for each
+            // Create PointNomral() Object -> x,y,z, nx, ny, nz
+            pcl::PointCloud<pcl::PointNormal>::Ptr filtered (new pcl::PointCloud<pcl::PointNormal>);
+           
+            // Loop through each point and normal to generate pt and arrow in z=0 plane
             for (size_t i = 0; i < cloud_normals->points.size(); ++i)
             {
                 const auto& pt = cloud->points[i];
@@ -67,39 +75,19 @@ class PointCloudProcesser : public rclcpp::Node
                     continue;
                 }
 
-                // Create a Marker message to visualize normals as arrows
-                visualization_msgs::msg::Marker marker;
-                marker.header.frame_id = "livox_frame";
-                marker.header.stamp = msg->header.stamp;
-                marker.ns = "normals";
-                marker.id = i;
-                marker.type = visualization_msgs::msg::Marker::ARROW;
-                marker.action = visualization_msgs::msg::Marker::ADD;
-                marker.pose.orientation.w = 1.0;
-                marker.scale.x = 0.1;  // Arrow shaft radius
-                marker.scale.y = 0.01;   // Arrow head size
-                marker.scale.z = 0.01;   // Arrow head size
-                marker.color.a = 1.0;
-                marker.color.r = 0.0;
-                marker.color.g = 1.0;   // Green color for normals
-                marker.color.b = 0.0;
-
-                // Set marker position (arrow origin)
-                marker.pose.position.x = pt.x;
-                marker.pose.position.y = pt.y;
-                marker.pose.position.z = pt.z;
-                 // Normalize the normal vector
-                tf2::Vector3 normal_vec(normal.normal_x, normal.normal_y, normal.normal_z);
+                // Filter if pt is above 1m of cloud
+                if(pt.z>1.2){
+                    continue;
+                }
+        
+                // Normalize the normal vector
+                tf2::Vector3 normal_vec(normal.normal_x, normal.normal_y, 0.0);
                 normal_vec.normalize();
-                
 
                 if(normal_vec.getZ()>0.5 || normal_vec.getZ()<-0.5){
-                    marker.color.r=1.0;
-                    marker.color.g=0.0;
-                    RCLCPP_INFO(this->get_logger(), "p_start: z=%.3f", normal_vec.getZ());
+                    // RCLCPP_INFO(this->get_logger(), "p_start: z=%.3f", normal_vec.getZ());
                     continue;
-
-                }
+                }                
 
                 // Compute rotation from X-axis to normal direction
                 tf2::Vector3 x_axis(1.0, 0.0, 0.0);
@@ -107,34 +95,46 @@ class PointCloudProcesser : public rclcpp::Node
                 q.setRotation(x_axis.cross(normal_vec), x_axis.angle(normal_vec));
                 q.normalize();
 
-                marker.pose.orientation.x = q.x();
-                marker.pose.orientation.y = q.y();
-                marker.pose.orientation.z = q.z();
-                marker.pose.orientation.w = q.w();
-                
-                marker_array.markers.push_back(marker);
+                // Skip if NaN in point or normal
+                if (!isFinite(q)) {
+                    continue;
+                }
 
-                // Log p_start
-                // RCLCPP_INFO(this->get_logger(), "p_start: x=%.3f, y=%.3f, z=%.3f", 
-                // pt.x,pt.y, pt.z);
-                
+                pcl::PointNormal p;
+                p.x=pt.x; p.y=pt.y; p.z=pt.z;
+                p.normal_x=normal.normal_x;
+                p.normal_y=normal.normal_y;
+                p.normal_z=normal.normal_z;
+                filtered->points.push_back(p);
             }
-          
-            // // Convert to ROS message (DEBUG Tools)
-            // sensor_msgs::msg::PointCloud2 output_msg;
-            // pcl::toROSMsg(*cloud, output_msg);
-            // output_msg.header = msg->header;  // keep frame_id and timestamp
 
+            filtered->width = filtered->points.size();
+            filtered->height = 1;
+
+            // Convert filtered to sensormsg and publish
+            sensor_msgs::msg::PointCloud2 filtered_out;
+            pcl::toROSMsg(*filtered, filtered_out);
+            filtered_out.header = msg->header;
+
+            // Voxel Object
+            pcl::PointCloud<pcl::PointNormal>::Ptr arr_voxel (new pcl::PointCloud<pcl::PointNormal>);
+            pcl::VoxelGrid<pcl::PointNormal> arr;
+            arr.setInputCloud(filtered);
+            arr.setLeafSize(0.05f, 0.05f, 0.05f);
+            arr.filter(*arr_voxel);
+            sensor_msgs::msg::PointCloud2 ros_cloud;
+            pcl::toROSMsg(*arr_voxel, ros_cloud);
+            ros_cloud.header.frame_id = "livox_frame";
+            ros_cloud.header.stamp = msg->header.stamp;
+            
             // Publish
-            ne_pub_->publish(marker_array);
-            // pc_pub_->publish(output_msg);
+            voxel_pub_ -> publish(ros_cloud);
+            filtered_pub_ -> publish(filtered_out);
         }
 
         rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pc_sub_;
-        rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr ne_pub_;
-        // rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pc_pub_;
-
-
+        rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr voxel_pub_;
+        rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_pub_;
 };
 
 int main(int argc, char *argv[])

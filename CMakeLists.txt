@@ -21,9 +21,17 @@ ament_target_dependencies(pcd_write PCL rclcpp sensor_msgs)
 add_executable (pcd_process src/pcd_process.cpp)
 ament_target_dependencies(pcd_process PCL rclcpp sensor_msgs visualization_msgs pcl_conversions tf2)
 
+add_executable (norm_viz src/normal_visualizer.cpp)
+ament_target_dependencies(norm_viz PCL rclcpp sensor_msgs visualization_msgs pcl_conversions)
+
+add_executable (voxel_viz src/voxel_visualizer.cpp)
+ament_target_dependencies(voxel_viz PCL rclcpp sensor_msgs visualization_msgs pcl_conversions)
+
 install(TARGETS
   pcd_write
   pcd_process
+  norm_viz
+  voxel_viz
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
