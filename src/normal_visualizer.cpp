@@ -13,7 +13,7 @@ class NormalVisualizer : public rclcpp::Node{
             this->declare_parameter("viz_3d", true);
             this->get_parameter("viz_3d", viz_3d_);
             pc_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-                "filtered_cloud", 10, std::bind(&NormalVisualizer::callback, this, std::placeholders::_1));
+                "voxel_grid", 10, std::bind(&NormalVisualizer::callback, this, std::placeholders::_1));
             ne_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("cloud_normals", 10);
         }
     private:
@@ -34,7 +34,7 @@ class NormalVisualizer : public rclcpp::Node{
                 marker.type = visualization_msgs::msg::Marker::ARROW;
                 marker.action = visualization_msgs::msg::Marker::ADD;
                 marker.pose.orientation.w = 1.0;
-                marker.scale.x = 0.05;  // Arrow shaft radius
+                marker.scale.x = 0.01;  // Arrow shaft radius
                 marker.scale.y = 0.01;   // Arrow head size
                 marker.scale.z = 0.01;   // Arrow head size
                 marker.color.a = 1.0;

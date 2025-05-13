@@ -7,6 +7,8 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
+// TODO: Voxel gets centeroid data. Can i just get the center of the voxel? (To better see z-direction overlaps and acutaly gridding)
+
 class NormalVisualizer : public rclcpp::Node{
     public:
         NormalVisualizer(): Node("normal_visualizer"){
@@ -22,6 +24,7 @@ class NormalVisualizer : public rclcpp::Node{
             visualization_msgs::msg::MarkerArray cube_array;
 
             int id = 0;
+            float leaf_size = 0.05f;
 
             for (const auto& pt : voxel_arr->points) {
 

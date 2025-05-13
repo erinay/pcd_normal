@@ -5,7 +5,9 @@
 #include <pcl/conversions.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/features/normal_3d.h>
+#include <pcl/common/common.h>  
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/crop_box.h>
 
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
@@ -43,9 +45,20 @@ class PointCloudProcesser : public rclcpp::Node
             pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
             pcl::fromROSMsg(*msg, *cloud);
 
+            // create box boundary]
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cube_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+            pcl::CropBox<pcl::PointXYZ> cropping;
+            float radius = 1.5f;
+            Eigen::Vector4f min_pt = {-radius, -radius,-radius, 1.0f};
+            Eigen::Vector4f max_pt = {radius, radius, radius, 1.0f};
+            cropping.setMin(min_pt);
+            cropping.setMax(max_pt);
+            cropping.setInputCloud(cloud);
+            cropping.filter(*cube_cloud);
+
             // Create the normal estimation class, and pass the input dataset to it
             pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
-            ne.setInputCloud(cloud);
+            ne.setInputCloud(cube_cloud);
 
             // Create an empty kdtree representation, and pass it to the normal estimation object.
             // Its content will be filled inside the object, based on the given input dataset (as no other search surface is given).
@@ -111,6 +124,7 @@ class PointCloudProcesser : public rclcpp::Node
             filtered->width = filtered->points.size();
             filtered->height = 1;
 
+
             // Convert filtered to sensormsg and publish
             sensor_msgs::msg::PointCloud2 filtered_out;
             pcl::toROSMsg(*filtered, filtered_out);
@@ -121,11 +135,32 @@ class PointCloudProcesser : public rclcpp::Node
             pcl::VoxelGrid<pcl::PointNormal> arr;
             arr.setInputCloud(filtered);
             arr.setLeafSize(0.05f, 0.05f, 0.05f);
+            
+            // Fixed Voxel Grid so occupancy gridding remains the same
+
+
+
+            // Voxel Filter
             arr.filter(*arr_voxel);
             sensor_msgs::msg::PointCloud2 ros_cloud;
             pcl::toROSMsg(*arr_voxel, ros_cloud);
             ros_cloud.header.frame_id = "livox_frame";
-            ros_cloud.header.stamp = msg->header.stamp;
+            ros_cloud.header.stamp = msg->header.stamp;     
+            
+            // Add information on min/max occupancy grid points.
+            // Access internal voxel grid data
+            Eigen::Vector3i min_pt_get = arr.getMinBoxCoordinates();
+            Eigen::Vector3i max_pt_get = arr.getMaxBoxCoordinates();
+            Eigen::Vector3i div_get = arr.getNrDivisions();
+
+            RCLCPP_INFO(this->get_logger(), "Min pt: (%d, %d, %d), Max pt: (%d, %d, %d)", min_pt_get[0], min_pt_get[1], min_pt_get[2], max_pt_get[0], max_pt_get[1], max_pt_get[2]);
+            RCLCPP_INFO(this->get_logger(), "Division: (%d,%d, %d)", div_get[0], div_get[1], div_get[2]);
+
+            // RCLCPP_INFO(this->get_logger(),"Min points per voxel: %d", arr.getMinimumPointsNumberPerVoxel());
+
+            // Flatten to 2D plane
+                // Q: How to flatten and combine normal info?
+                // During flattening, can i figure out a way to 
             
             // Publish
             voxel_pub_ -> publish(ros_cloud);
