@@ -94,7 +94,7 @@ class PointCloudProcesser : public rclcpp::Node
                 }
         
                 // Normalize the normal vector
-                tf2::Vector3 normal_vec(normal.normal_x, normal.normal_y, 0.0);
+                tf2::Vector3 normal_vec(normal.normal_x, normal.normal_y, normal.normal_z);
                 normal_vec.normalize();
 
                 if(normal_vec.getZ()>0.5 || normal_vec.getZ()<-0.5){
@@ -137,7 +137,7 @@ class PointCloudProcesser : public rclcpp::Node
             arr.setLeafSize(0.05f, 0.05f, 0.05f);
             
             // Fixed Voxel Grid so occupancy gridding remains the same
-
+            
 
 
             // Voxel Filter
