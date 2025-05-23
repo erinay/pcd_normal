@@ -1,0 +1,22 @@
+grid_map_visualization:
+  ros__parameters:
+    grid_map_topic: /occupancy_mapping
+
+    grid_map_visualizations: [map_convert, surface_normals]
+    # grid_map_visualizations: [surface_normals]
+
+    map_convert:
+      type: occupancy_grid
+      params:
+        layer: occupancy
+        lower_threshold: 0.0
+        upper_threshold: 1.0
+
+    surface_normals:
+      type: vectors
+      params:
+        layer_prefix: normal_
+        position_layer: elevation
+        scale: 0.05
+        line_width: 0.01
+        color: 15600153

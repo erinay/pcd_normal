@@ -13,7 +13,7 @@ class NormalVisualizer : public rclcpp::Node{
             this->declare_parameter("viz_3d", true);
             this->get_parameter("viz_3d", viz_3d_);
             pc_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-                "voxel_grid", 10, std::bind(&NormalVisualizer::callback, this, std::placeholders::_1));
+                "filtered_cloud", 10, std::bind(&NormalVisualizer::callback, this, std::placeholders::_1));
             ne_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("cloud_normals", 10);
         }
     private:
