@@ -18,6 +18,8 @@
 #include <grid_map_core/grid_map_core.hpp>
 #include <grid_map_ros/GridMapRosConverter.hpp>
 
+#include <cmath>
+
 #include "pcd_process.hpp"
 
 // TODO: Subscribe to lidar data (pointCloud2 topic)
@@ -143,6 +145,11 @@ class PointCloudProcesser : public rclcpp::Node
                 p.normal_z=0.0;
                 filtered->points.push_back(p);
 
+                //Renormalize
+                float length=std::sqrt(normal.normal_x*normal.normal_x+normal.normal_y*normal.normal_y);
+                float renorm_x = normal.normal_x/length;
+                float renorm_y = normal.normal_y/length;
+
                 // set gridmap position
                 grid_map::Position pos(pt.x, pt.y);
                 if (!gridMap.isInside(pos)) continue; //Check if allowable position in gridded world
@@ -152,8 +159,8 @@ class PointCloudProcesser : public rclcpp::Node
                 float norm_x = gridMap.at("normal_x", index);
                 float norm_y = gridMap.at("normal_y", index);
                 float ct = counts[index];
-                gridMap.at("normal_x", index) = ((norm_x*ct)+normal.normal_x)/(ct+1);
-                gridMap.at("normal_y", index) = ((norm_y*ct)+normal.normal_y)/(ct+1);
+                gridMap.at("normal_x", index) = ((norm_x*ct)+renorm_x)/(ct+1);
+                gridMap.at("normal_y", index) = ((norm_y*ct)+renorm_y)/(ct+1);
                 counts[index]+=1;
                 gridMap.at("occupancy", index) = 1.0;
             }
