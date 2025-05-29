@@ -10,3 +10,7 @@ norm_viz visualizes the calculated normal arrows that are not in the vertical di
     
 voxel_viz visualizes voxel grid as cube
 
+# Notes on Livox Install (Ubuntu 24.04)
+### [until LIVOX releases compatible versions]
+Install Livox-SDK2 here: https://github.com/tu-darmstadt-ros-pkg/Livox-SDK2/tree/jazzy
+Install Livox-ROS2 package here: https://github.com/tu-darmstadt-ros-pkg/livox_ros_driver2?tab=readme-ov-file
