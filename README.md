@@ -14,3 +14,6 @@ voxel_viz visualizes voxel grid as cube
 ### [until LIVOX releases compatible versions]
 Install Livox-SDK2 here: https://github.com/tu-darmstadt-ros-pkg/Livox-SDK2/tree/jazzy
 Install Livox-ROS2 package here: https://github.com/tu-darmstadt-ros-pkg/livox_ros_driver2?tab=readme-ov-file
+
+# Notes on PCL Package
+PCL package currently takes in the point cloud and output normals: https://pointclouds.org/
