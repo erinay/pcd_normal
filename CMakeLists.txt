@@ -22,6 +22,7 @@ find_package(tf2 REQUIRED)
 find_package(grid_map_ros REQUIRED)
 find_package(grid_map_pcl REQUIRED)
 find_package(grid_map_core REQUIRED)
+find_package(nav_msgs REQUIRED)
 
 include_directories(${PCL_INCLUDE_DIRS})  # Add PCL includes
 link_directories(${PCL_LIBRARY_DIRS})
@@ -40,11 +41,15 @@ ament_target_dependencies(norm_viz PCL rclcpp sensor_msgs visualization_msgs pcl
 add_executable (voxel_viz src/voxel_visualizer.cpp)
 ament_target_dependencies(voxel_viz PCL rclcpp sensor_msgs visualization_msgs pcl_conversions)
 
+add_executable(shadowing src/shadow.cpp)
+ament_target_dependencies(shadowing rclcpp nav_msgs)
+
 install(TARGETS
   pcd_write
   pcd_process
   norm_viz
   voxel_viz
+  shadowing
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

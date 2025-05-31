@@ -49,6 +49,12 @@ def generate_launch_description():
         name='rviz2',
         output='screen'
     )
+    shadow_node = Node(
+        package='pcd',
+        executable='shadowing',
+        name='shadowing',
+        output='screen'
+    )
 
     ld = LaunchDescription()
 
@@ -60,5 +66,6 @@ def generate_launch_description():
     ld.add_action(grid_map_visualization_node)
     ld.add_action(tf_node)
     ld.add_action(rviz2_node)
+    ld.add_action(shadow_node)
     
     return ld

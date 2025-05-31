@@ -61,7 +61,7 @@ class PointCloudProcesser : public rclcpp::Node
 
             // Create GridMap
             const float bound = 6.0; //size of cube to discretize
-            const float resoultion = 0.1; //resolution
+            const float resoultion = 0.05; //resolution
             grid_map::GridMap gridMap({"normal_x", "normal_y", "occupancy", "elevation"}); // Initializing grid map with a single layer to encode elevation data at eahc poiint
             gridMap.setGeometry(grid_map::Length(bound, bound), resoultion); 
             gridMap.setPosition(grid_map::Position(0.0, 0.0)); // set center at (0, 0)
