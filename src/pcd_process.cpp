@@ -22,7 +22,6 @@
 
 #include "pcd_process.hpp"
 
-// TODO: Subscribe to lidar data (pointCloud2 topic)
 class PointCloudProcesser : public rclcpp::Node
 {
     public:
@@ -117,7 +116,7 @@ class PointCloudProcesser : public rclcpp::Node
 
                 // Normal Vector Processing
                 // // Skip if NaN in point or normal
-                if (!pcl::isFinite(pt) || !pcl::isFinite(normal) ||pt.z>1.2) {
+                if (!pcl::isFinite(pt) || !pcl::isFinite(normal) ||pt.z>1.2|| pt.z<0.2) {
                     continue;
                 }        
                 // // Normalize the normal vector

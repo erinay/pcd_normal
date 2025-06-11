@@ -41,15 +41,15 @@ ament_target_dependencies(norm_viz PCL rclcpp sensor_msgs visualization_msgs pcl
 add_executable (voxel_viz src/voxel_visualizer.cpp)
 ament_target_dependencies(voxel_viz PCL rclcpp sensor_msgs visualization_msgs pcl_conversions)
 
-add_executable(shadowing src/shadow.cpp)
-ament_target_dependencies(shadowing rclcpp nav_msgs)
+add_executable(sender src/sender.cpp)
+ament_target_dependencies(sender rclcpp nav_msgs)
 
 install(TARGETS
   pcd_write
   pcd_process
   norm_viz
   voxel_viz
-  shadowing
+  sender
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
