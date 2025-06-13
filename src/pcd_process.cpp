@@ -6,6 +6,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/common/common.h>  
+#include <pcl/common/transforms.h> 
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/crop_box.h>
 
@@ -19,8 +20,11 @@
 #include <grid_map_ros/GridMapRosConverter.hpp>
 
 #include <cmath>
+#include <Eigen/Dense>
 
 #include "pcd_process.hpp"
+
+double ANGLE=12.6*M_PI/180.0;
 
 class PointCloudProcesser : public rclcpp::Node
 {
@@ -30,6 +34,8 @@ class PointCloudProcesser : public rclcpp::Node
             // Set up pointcloud subscriber
             pc_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
                 "livox/points", 10, std::bind(&PointCloudProcesser::cloud_callback, this, std::placeholders::_1));
+            // TEMP reformatted angle publisher
+            tf_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("tf_cloud",10);
             // Set up normal publisher      
             filtered_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("filtered_cloud", 10);
             // Grid map publisher
@@ -42,9 +48,28 @@ class PointCloudProcesser : public rclcpp::Node
             // Create PCL Point CLoud object
             pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
             pcl::fromROSMsg(*msg, *cloud);
+
+            // Define rotation matrix (e.g., rotate 30° around X)
+            // Manually fill in the rotation matrix values from Python
+            Eigen::Matrix3f R;
+            R << std::cos(ANGLE), 0.0f, std::sin(ANGLE),
+            0.0f,  1.0f, 0.0f,
+            -std::sin(ANGLE), 0.0f, std::cos(ANGLE);
+            // Create affine transformation
+            Eigen::Affine3f transform = Eigen::Affine3f::Identity();
+            transform.linear() = R;  // No translation, only rotation
+            // Apply transform
+            pcl::PointCloud<pcl::PointXYZ>::Ptr rotated_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+            pcl::transformPointCloud(*cloud, *rotated_cloud, transform);
+            // Convert filtered to sensormsg and publish (for viz)
+            sensor_msgs::msg::PointCloud2 tf_out;
+            pcl::toROSMsg(*rotated_cloud, tf_out);
+            tf_out.header = msg->header; 
+            tf_pub_ -> publish(tf_out);
+
             // Create the normal estimation class, and pass the input dataset to it
             pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
-            ne.setInputCloud(cloud);
+            ne.setInputCloud(rotated_cloud);
             // Create an empty kdtree representation, and pass it to the normal estimation object.
             // Its content will be filled inside the object, based on the given input dataset (as no other search surface is given).
             pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ> ());
@@ -116,7 +141,7 @@ class PointCloudProcesser : public rclcpp::Node
 
                 // Normal Vector Processing
                 // // Skip if NaN in point or normal
-                if (!pcl::isFinite(pt) || !pcl::isFinite(normal) ||pt.z>1.2|| pt.z<0.2) {
+                if (!pcl::isFinite(pt) || !pcl::isFinite(normal) ||pt.z>1.2||pt.z<0.05) {
                     continue;
                 }        
                 // // Normalize the normal vector
@@ -138,7 +163,7 @@ class PointCloudProcesser : public rclcpp::Node
 
                 // Publish ros pointcloud2
                 pcl::PointNormal p;
-                p.x=pt.x; p.y=pt.y; p.z=0.0;
+                p.x=pt.x; p.y=pt.y; p.z=pt.z;
                 p.normal_x=normal.normal_x;
                 p.normal_y=normal.normal_y;
                 p.normal_z=0.0;
@@ -161,7 +186,9 @@ class PointCloudProcesser : public rclcpp::Node
                 gridMap.at("normal_x", index) = ((norm_x*ct)+renorm_x)/(ct+1);
                 gridMap.at("normal_y", index) = ((norm_y*ct)+renorm_y)/(ct+1);
                 counts[index]+=1;
+                // if (counts[index]>=5){
                 gridMap.at("occupancy", index) = 1.0;
+                // }
             }
 
             filtered->width = filtered->points.size();
@@ -180,6 +207,7 @@ class PointCloudProcesser : public rclcpp::Node
         }
 
         rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pc_sub_;
+        rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr tf_pub_;
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_pub_;
         rclcpp::Publisher<grid_map_msgs::msg::GridMap>::SharedPtr grid_pub_;
 };
