@@ -9,6 +9,9 @@
 #include <pcl/common/transforms.h> 
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/crop_box.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/segmentation/sac_segmentation.h>
 
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
@@ -46,7 +49,7 @@ class PointCloudProcesser : public rclcpp::Node
         void cloud_callback(const sensor_msgs::msg::PointCloud2::SharedPtr msg){
 
             // Create PCL Point CLoud object
-            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
+            pcl::PointCloud<pcl::PointXYZI>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZI>);
             pcl::fromROSMsg(*msg, *cloud);
 
             // Define rotation matrix (e.g., rotate 30° around X)
@@ -59,20 +62,24 @@ class PointCloudProcesser : public rclcpp::Node
             Eigen::Affine3f transform = Eigen::Affine3f::Identity();
             transform.linear() = R;  // No translation, only rotation
             // Apply transform
-            pcl::PointCloud<pcl::PointXYZ>::Ptr rotated_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+            pcl::PointCloud<pcl::PointXYZI>::Ptr rotated_cloud(new pcl::PointCloud<pcl::PointXYZI>);
             pcl::transformPointCloud(*cloud, *rotated_cloud, transform);
+
+            pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_no_ground(new pcl::PointCloud<pcl::PointXYZI>);
+            removeGroundPlane(rotated_cloud, cloud_no_ground);
+
             // Convert filtered to sensormsg and publish (for viz)
             sensor_msgs::msg::PointCloud2 tf_out;
-            pcl::toROSMsg(*rotated_cloud, tf_out);
+            pcl::toROSMsg(*cloud_no_ground, tf_out);
             tf_out.header = msg->header; 
             tf_pub_ -> publish(tf_out);
 
             // Create the normal estimation class, and pass the input dataset to it
-            pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
-            ne.setInputCloud(rotated_cloud);
+            pcl::NormalEstimation<pcl::PointXYZI, pcl::Normal> ne;
+            ne.setInputCloud(cloud_no_ground);
             // Create an empty kdtree representation, and pass it to the normal estimation object.
             // Its content will be filled inside the object, based on the given input dataset (as no other search surface is given).
-            pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ> ());
+            pcl::search::KdTree<pcl::PointXYZI>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZI> ());
             ne.setSearchMethod(tree);
             // Output datasets
             pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>);
@@ -136,12 +143,12 @@ class PointCloudProcesser : public rclcpp::Node
             // Loop through each point and normal to generate pt and arrow in z=0 plane
             for (size_t i = 0; i < cloud_normals->points.size(); ++i)
             {
-                const auto& pt = cloud->points[i];
+                const auto& pt = cloud_no_ground->points[i];
                 const auto& normal = cloud_normals->points[i];
 
                 // Normal Vector Processing
                 // // Skip if NaN in point or normal
-                if (!pcl::isFinite(pt) || !pcl::isFinite(normal) ||pt.z>1.2||pt.z<0.05) {
+                if (!pcl::isFinite(pt) || !pcl::isFinite(normal) ||pt.z>1.2) {
                     continue;
                 }        
                 // // Normalize the normal vector
@@ -204,6 +211,67 @@ class PointCloudProcesser : public rclcpp::Node
             std::unique_ptr<grid_map_msgs::msg::GridMap> out_msg;
             out_msg = grid_map::GridMapRosConverter::toMessage(gridMap);
             grid_pub_ -> publish(std::move(out_msg));
+        }
+
+        void removeGroundPlane(const pcl::PointCloud<pcl::PointXYZI>::Ptr& input_cloud,
+                       pcl::PointCloud<pcl::PointXYZI>::Ptr& ground_removed_cloud)  {
+
+            pcl::PointIndices::Ptr ground_candidate_indices(new pcl::PointIndices);
+            pcl::PointCloud<pcl::PointXYZI>::Ptr ground_candidates(new pcl::PointCloud<pcl::PointXYZI>);
+            
+            for (size_t i = 0; i < input_cloud->points.size(); ++i) {
+                const auto& pt = input_cloud->points[i];
+                if (!pcl::isFinite(pt)) continue;
+                if (pt.z < 0.0) {
+                    ground_candidates->points.push_back(pt);
+                    ground_candidate_indices->indices.push_back(i);
+                }
+            }
+
+
+            ground_candidates->width = ground_candidates->points.size();
+            ground_candidates->height = 1;
+            ground_candidates->is_dense = true;
+
+            if (ground_candidates->empty()) {
+                std::cout << "No ground candidates found under Z threshold." << std::endl;
+                *ground_removed_cloud = *input_cloud;  // Return unmodified cloud
+                return;
+            }
+            // Create the segmentation object
+            pcl::SACSegmentation<pcl::PointXYZI> seg;            
+            pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+            pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+
+            seg.setOptimizeCoefficients(true);
+            seg.setModelType(pcl::SACMODEL_PERPENDICULAR_PLANE);
+            seg.setAxis(Eigen::Vector3f(0.0, 0.0, 1.0));        // Prefer planes perpendicular to Z (i.e. horizontal)
+            seg.setMethodType(pcl::SAC_RANSAC);
+            seg.setDistanceThreshold(0.05);  // Adjust this threshold based on sensor noise
+            seg.setInputCloud(ground_candidates);
+            seg.segment(*inliers, *coefficients);
+
+            if (inliers->indices.size() == 0)
+            {
+                std::cout << "Could not estimate a planar model for the given dataset." << std::endl;
+                // break;
+            }
+
+             pcl::PointIndices::Ptr full_cloud_inliers(new pcl::PointIndices);
+            for (int idx : inliers->indices) {
+                full_cloud_inliers->indices.push_back(ground_candidate_indices->indices[idx]);
+            }
+
+            // Extract non-ground (outlier) points
+            pcl::ExtractIndices<pcl::PointXYZI> extract;
+            extract.setInputCloud(input_cloud);
+            extract.setIndices(full_cloud_inliers);
+            extract.setNegative(true);  // True = remove inliers (i.e., remove the plane)
+            extract.filter(*ground_removed_cloud);
+
+            // std::cout << "Plane coefficients: ";
+            // for (float c : coefficients->values) std::cout << c << " ";
+            std::cout << std::endl;
         }
 
         rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pc_sub_;
